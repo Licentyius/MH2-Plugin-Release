@@ -1,6 +1,6 @@
 """
     License information: data/licenses/makehuman_license.txt
-    Author: black-punkduck
+    Author: black-punkduck, Elvaerwyn_MH2 2026 V1.1
 
     Classes:
     * MemTableModel
@@ -11,14 +11,17 @@
 
 from PySide6.QtCore import Qt, QAbstractTableModel, QSortFilterProxyModel
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget, QPushButton, QRadioButton, QGroupBox, QCheckBox,
-    QTableView, QGridLayout, QHeaderView, QAbstractItemView, QScrollArea, QLineEdit, QComboBox
-    )
-from PySide6.QtGui import QColor, QPixmap
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget, QPushButton, 
+    QRadioButton, QGroupBox, QCheckBox, QTableView, QGridLayout, 
+    QHeaderView, QAbstractItemView, QScrollArea, QLineEdit, QComboBox, QStyle
+)
+
+from PySide6.QtGui import QColor, QPixmap, QIcon 
 from gui.common import IconButton, ErrorBox, ImageBox
 
 import sys
 import os
+
 
 class MemTableModel(QAbstractTableModel):
     def __init__(self, data, columns):
@@ -296,7 +299,7 @@ class MHSelectAssetWindow(QWidget):
         self.json = json
         self.current_asset = None
         self.setWindowTitle("Select from asset list")
-        self.resize (1000, 600)
+        self.resize(1000, 600)
         columns = ["id", "Name", "Category", "Author", "Faces"]
         self.thumbpath = os.path.join(self.env.path_userdata, "downloads", self.env.basename, "thumb.png")
         self.renderpath = os.path.join(self.env.path_userdata, "downloads", self.env.basename, "render")
@@ -322,6 +325,7 @@ class MHSelectAssetWindow(QWidget):
         self.tab.addTab(table.createPage(), "Proxy")
         self.tables.append(table)
 
+        # Primary window layout
         layout = QHBoxLayout()
 
         vlayout = QVBoxLayout()
@@ -333,19 +337,20 @@ class MHSelectAssetWindow(QWidget):
         hlayout.addWidget(self.query)
         hlayout.addWidget(QLabel("Column:"))
         hlayout.addWidget(self.columnNum)
-        rbutton = IconButton(3,  os.path.join(self.env.path_sysicon, "rescan.png"), "Rescan list.", self.redisplay_call)
+        rbutton = IconButton(3, os.path.join(self.env.path_sysicon, "rescan.png"), "Rescan list.", self.redisplay_call)
         hlayout.addWidget(rbutton)
         gb.setLayout(hlayout)
         vlayout.addWidget(gb)
         layout.addLayout(vlayout)
 
-        vlayout = QVBoxLayout()
+        # Right side layout column
+        right_vlayout = QVBoxLayout()
 
         assetgb = QGroupBox("Selected asset")
         assetgb.setObjectName("subwindow")
         gblayout = QGridLayout()
-        self.camera = IconButton(1,  os.path.join(self.env.path_sysicon, "camera.png"), "Load thumbnail (enabled if available)", self.loadThumb)
-        self.render = IconButton(2,  os.path.join(self.env.path_sysicon, "render.png"), "Load demo picture (enabled if available)", self.loadDemo)
+        self.camera = IconButton(1, os.path.join(self.env.path_sysicon, "camera.png"), "Load thumbnail (enabled if available)", self.loadThumb)
+        self.render = IconButton(2, os.path.join(self.env.path_sysicon, "render.png"), "Load demo picture (enabled if available)", self.loadDemo)
         gblayout.addWidget(self.camera, 0, 0)
         gblayout.addWidget(self.render, 1, 0)
         self.imglabel = QLabel()
@@ -355,11 +360,11 @@ class MHSelectAssetWindow(QWidget):
         gblayout.addWidget(QLabel("Created:"), 2, 0)
         gblayout.addWidget(QLabel("Changed:"), 3, 0)
         gblayout.addWidget(QLabel("License:"), 4, 0)
-        gblayout.addWidget(QLabel("Attached:"),5, 0)
+        gblayout.addWidget(QLabel("Attached:"), 5, 0)
         self.created = QLabel()
         self.changed = QLabel()
         self.license = QLabel()
-        self.attached= QLabel()
+        self.attached = QLabel()
 
         self.description = QLabel()
         self.description.setWordWrap(True)
@@ -372,27 +377,81 @@ class MHSelectAssetWindow(QWidget):
         gblayout.addWidget(self.created, 2, 1)
         gblayout.addWidget(self.changed, 3, 1)
         gblayout.addWidget(self.license, 4, 1)
-        gblayout.addWidget(self.attached,5, 1)
+        gblayout.addWidget(self.attached, 5, 1)
         gblayout.addWidget(scroll, 6, 0, 1, 2)
         assetgb.setLayout(gblayout)
-        vlayout.addWidget(assetgb)
+        right_vlayout.addWidget(assetgb)
+
+        # Layout container for Action row (Download button + Custom Cart button)
+        action_layout = QHBoxLayout()
 
         self.dbutton = QPushButton("Download")
         self.dbutton.clicked.connect(self.download_call)
-        vlayout.addWidget(self.dbutton)
+        action_layout.addWidget(self.dbutton)
+
+        # The brand new custom Add to Cart icon button definition
+        self.cartBtn = QPushButton()
+        self.cartBtn.setToolTip("Add selected asset to download cart")
+        self.cartBtn.setFixedWidth(40)
+        self.cartBtn.clicked.connect(self.add_selected_to_cart_call)
+
+        # Unified path tracking using fallback logic chain
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.icon_cart_path = os.path.join(root_dir, "data", "icons", "cart.png")
+        if not os.path.exists(self.icon_cart_path):
+            self.icon_cart_path = os.path.join(self.env.path_sysicon, "cart.png")
+
+        # Assign initial icon safely
+        if os.path.exists(self.icon_cart_path):
+            self.cartBtn.setIcon(QIcon(self.icon_cart_path))
+            from PySide6.QtCore import QSize
+            self.cartBtn.setIconSize(QSize(20, 20))
+        else:
+            cart_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder)
+            self.cartBtn.setIcon(cart_icon)
+
+        # Append the cart button next to download inside the action layout row
+        action_layout.addWidget(self.cartBtn)
+        right_vlayout.addLayout(action_layout)
 
         button = QPushButton("Close")
         button.clicked.connect(self.close_call)
-        vlayout.addWidget(button)
+        right_vlayout.addWidget(button)
 
-        layout.addLayout(vlayout)
+        layout.addLayout(right_vlayout)
         self.setLayout(layout)
+
         self.fillComboBox()
         self.activateDownload()
 
     def activateDownload(self):
+        from PySide6.QtWidgets import QStyle
+        from PySide6.QtGui import QIcon
+        from PySide6.QtCore import QSize
+        
+        has_selection = self.current_asset is not None
+        
         if self.dbutton is not None:
-            self.dbutton.setEnabled(self.current_asset is not None)
+            self.dbutton.setEnabled(has_selection)
+            
+        if hasattr(self, 'cartBtn') and self.cartBtn is not None:
+            self.cartBtn.setEnabled(has_selection)
+            
+            if has_selection and hasattr(self.parent, 'download_cart') and self.current_asset in self.parent.download_cart:
+                chk_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+                self.cartBtn.setIcon(chk_icon)
+                self.cartBtn.setIconSize(QSize(20, 20)) 
+                self.cartBtn.setToolTip("Added to Cart ✓")
+            else:
+                if os.path.exists(self.icon_cart_path):
+                    self.cartBtn.setIcon(QIcon(self.icon_cart_path))
+                    self.cartBtn.setIconSize(QSize(20, 20))
+                else:
+                    plus_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder)
+                    self.cartBtn.setIcon(plus_icon)
+                    self.cartBtn.setIconSize(QSize(20, 20))
+                
+                self.cartBtn.setToolTip("Add selected asset to download cart")
         
     def fillComboBox(self):
         if len(self.tables) == 0:
@@ -425,7 +484,6 @@ class MHSelectAssetWindow(QWidget):
             name = os.path.join(self.env.path_sysicon, "noidea.png")
         pixmap = QPixmap(name).scaled(128, 128, aspectMode=Qt.KeepAspectRatio)
         self.imglabel.setPixmap(pixmap)
-
 
     def loadThumb(self):
         v = self.current_asset
@@ -473,8 +531,9 @@ class MHSelectAssetWindow(QWidget):
                     if b["belonging_is_assigned"] is True:
                         if "belongs_to_core_asset" in b:
                             text = b["belongs_to_core_asset"]
-                        elif "belongs_to_title" in b:
+                        elif "belongs_to_title" in b:  # <-- Aligned here under 'belongs_to_core_asset'
                             text = b["belongs_to_title"]
+
             self.attached.setText(text)
             self.description.setText(m["description"])
 
@@ -500,7 +559,7 @@ class MHSelectAssetWindow(QWidget):
             if mtype == dtype:
                 cat = elem.get("category")
                 author = elem.get("username")
-                faces  = elem.get("faces")
+                faces = elem.get("faces")
                 if author is None:
                     author = "unknown"
                 data.append([key, elem["title"], cat, author, faces])
@@ -515,11 +574,28 @@ class MHSelectAssetWindow(QWidget):
             self.parent.singleDownLoad(self.current_asset)
 
     def redisplay_call(self):
-        """
-        refreshes all tabs
-        """
         for table in self.tables:
             table.refreshData()
 
     def close_call(self):
         self.close()
+
+    def add_selected_to_cart_call(self):
+        from PySide6.QtWidgets import QStyle  # Scope Safety Added
+        if self.current_asset is not None:
+            assetname = self.current_asset
+            if hasattr(self.parent, 'download_cart'):
+                if assetname not in self.parent.download_cart:
+                    self.parent.download_cart.append(assetname)
+                    chk_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+                    self.cartBtn.setIcon(chk_icon)
+                    self.cartBtn.setToolTip("Added to Cart ✓")
+                    
+                    if hasattr(self.parent, 'masterCartLabel'):
+                        self.parent.masterCartLabel.setText(f"Items waiting in queue: {len(self.parent.download_cart)}")
+                    
+                    if hasattr(self.parent, 'checkoutBtn'):
+                        self.parent.checkoutBtn.setText(f"Download All ({len(self.parent.download_cart)} Items)")
+                        self.parent.checkoutBtn.setEnabled(True)
+
+

@@ -1,13 +1,13 @@
 """
     License information: data/licenses/makehuman_license.txt
-    Author: black-punkduck
+    Author: black-punkduck, Elvaerwyn_MH2 2026 V1.1
 
     Classes:
     * DownLoadImport
 """
 from PySide6.QtWidgets import (
     QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QLineEdit, QLabel,
-    QMessageBox, QRadioButton, QCheckBox, QComboBox
+    QMessageBox, QRadioButton, QCheckBox, QComboBox, QStyle, QVBoxLayout
     )
 
 from PySide6.QtCore import Qt
@@ -35,6 +35,8 @@ class DownLoadImport(QVBoxLayout):
         self.packitems = []
         self.packurls = []
         self.use_userpath = True
+        self.download_cart = []
+        self.cart_processing = False
         self.assets = AssetPack()
 
         stdmesh =  self.env.release_info["standardmesh"]
@@ -54,6 +56,9 @@ class DownLoadImport(QVBoxLayout):
         self.getAssetPackList()
 
         super().__init__()
+
+        self.download_cart = []
+        self.cart_processing = False
 
         self.latest = self.assets.testAssetList(self.assetlistpath)
         if self.latest is None:
@@ -155,6 +160,36 @@ class DownLoadImport(QVBoxLayout):
         self.addWidget(gb)
         self.packinserted()
         self.fnameinserted()
+        # ----------------------------------------------------
+        # BATCH CART PANEL Begins
+        # ----------------------------------------------------
+        checkout_panel = QGroupBox("Batch Asset Cart")
+        panel_layout = QHBoxLayout(checkout_panel)
+
+        self.masterCartLabel = QLabel("Cart is empty")
+        panel_layout.addWidget(self.masterCartLabel)
+        panel_layout.addStretch()
+
+        # Configures text string space
+        self.checkoutBtn = QPushButton("Download All Items")
+        self.checkoutBtn.setDisabled(True) 
+        
+        # Pulls the icon from icon/cart.png
+        from PySide6.QtGui import QIcon
+        icon_path = os.path.join(self.env.path_sysicon, "cart.png")
+        
+        if os.path.exists(icon_path):
+            self.checkoutBtn.setIcon(QIcon(icon_path))
+        else:
+            # Fallback backup icon if path fails
+            dl_icon = self.parent.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)
+            self.checkoutBtn.setIcon(dl_icon)
+            
+        self.checkoutBtn.clicked.connect(self.on_checkout_clicked)
+        panel_layout.addWidget(self.checkoutBtn)
+
+        self.addWidget(checkout_panel) 
+
 
     def searchzipfile(self):
         freq = MHFileRequest(self.glob, "Select zipfile", "compressed file (*.zip)", "")
@@ -297,7 +332,9 @@ class DownLoadImport(QVBoxLayout):
             ErrorBox(self.parent, self.error)
         else:
             QMessageBox.information(self.parent, "Done!", self.bckproc.finishmsg)
-        self.bckproc = None
+        self.bckproc = None 
+        if hasattr(self, 'cart_processing') and self.cart_processing:
+            self.process_cart_queue()
 
     def finishListLoad(self):
         if self.prog_window is not None:
@@ -494,12 +531,65 @@ class DownLoadImport(QVBoxLayout):
             self.bckproc.finishmsg = "Download finished"
             self.bckproc.finished.connect(self.finishLoad)
 
+    def add_to_cart_clicked(self):
+        button = self.sender()
+        assetname = button.property("asset_name")
+        
+        if assetname in self.download_cart:
+            button.setToolTip("Already waiting in your cart!")
+            return
+            
+        self.download_cart.append(assetname)
+        
+        # Uses parent style framework to render icons
+        success_icon = self.parent.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+        button.setIcon(success_icon)
+        button.setEnabled(False)
+        button.setToolTip("Added to Cart ✓")
+        
+        self.masterCartLabel.setText(f"Items waiting in queue: {len(self.download_cart)}")
+        self.checkoutBtn.setEnabled(True)
+
+    def on_checkout_clicked(self):
+        if self.download_cart:
+            self.checkoutBtn.setEnabled(False)
+            self.masterCartLabel.setText("Processing batch download queue...")
+            self.cart_processing = True
+            self.process_cart_queue()
+
+    def process_cart_queue(self):
+        if not self.download_cart:
+            self.cart_processing = False
+            self.masterCartLabel.setText("All items downloaded successfully! Cart empty.")
+            self.checkoutBtn.setEnabled(False)
+            return
+
+        if self.bckproc is not None:
+            if hasattr(self.bckproc, 'isRunning') and self.bckproc.isRunning():
+                return
+            elif hasattr(self.bckproc, 'isFinished') and not self.bckproc.isFinished():
+                return
+
+        self.cart_processing = True
+        next_asset = self.download_cart.pop(0)
+        self.masterCartLabel.setText(f"Downloading: {next_asset} ({len(self.download_cart)} left)")
+        
+        self.singleDownLoad(next_asset)
+
     def cleanUp(self):
         fullpath = self.parent.glob.lastdownload
         if fullpath is not None:
-            (fpath, fname ) = os.path.split(fullpath)
-            if os.path.isfile(fullpath):
-                os.remove(fullpath)
-            os.rmdir(fpath)
+            (fpath, fname) = os.path.split(fullpath)
+            try:
+                if os.path.isfile(fullpath):
+                    os.remove(fullpath)
+                # Safe checking: Only drop directory container if empty
+                if os.path.exists(fpath) and not os.listdir(fpath):
+                    os.rmdir(fpath)
+            except Exception as e:
+                self.env.logLine(1, f"Clean Up asset warning: {str(e)}")
+                
             self.parent.glob.lastdownload = None
-            self.filename.setText(self.parent.glob.lastdownload)
+            self.filename.setText("")
+            self.fnameinserted()
+
